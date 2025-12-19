@@ -1,6 +1,6 @@
 # 一些C++的总结
 ---
-## 1.为什么析构函数要是 virtual？
+## 1.为什么析构函数要用 virtual？
 * 原因：保证通过基类指针删除派生类对象时，派生类析构函数能够被调用。
 * 示例：
 ```cpp
@@ -29,7 +29,9 @@ delete p; // 调用顺序: Derived -> Base
             * virtual 会在对象中增加 vptr（虚表指针），占用额外内存（通常 8 字节）
             * 析构函数调用时多了间接跳转，微小性能开销
             * 如果没有派生类，就不会发生多态删除问题
+
 ---
+
 ## 2.什么是对象切片？什么时候会发生？
 * 对象切片：当将派生类对象赋值给基类对象（按值传递）时，派生类部分会“丢失”。
 * 示例：
@@ -44,7 +46,9 @@ Base b = d; // 派生类部分 b 被切掉，只保留 Base 部分
     * 按值赋值给基类
     * 容器存储基类对象，而插入的是派生类对象
 * 面试提示：通常用指针或引用避免对象切片。
+
 ---
+
 ## 3.Rule of 3 / 5 / 0 是什么？举例说明。
 * Rule of 3：如果类定义了 析构函数、拷贝构造函数、拷贝赋值运算符 中任意一个，就应该定义三个。
 * Rule of 5（C++11）：在 Rule of 3 的基础上加上 移动构造函数和移动赋值运算符。
@@ -66,6 +70,7 @@ public:
 };
 ```
 ---
+
 ## 4.什么是RAII，RAII的本质
 RAII（Resource Acquisition Is Initialization，资源获取即初始化）
 
@@ -93,7 +98,8 @@ RAII（Resource Acquisition Is Initialization，资源获取即初始化）
 | 线程    | `std::jthread` (C++20) |
 
 ---
-## 5.unique_ptr, shared_ptr, weak_ptr
+
+## 5.智能指针
 ### 5.1 unique_ptr
 独占资源，不可拷贝，只能通过 std::move 转移
 ```cpp
@@ -122,6 +128,7 @@ int main() {
     // main 函数依然拥有 myData
 }
 ```
+
 ### 5.2 shared_ptr
 本质是共享所有权。它内部维护了一个计数器：
 ```cpp
@@ -172,6 +179,7 @@ shared_ptr 的引用计数操作是线程安全的，但对象本身的访问不
 场景 C：多个线程修改 shared_ptr 指向哪里（不安全 ❌）
 
 ---
+
 ### 5.3 weak_ptr
 就像是一个“旁观者”。它指向 shared_ptr 管理的对象，但不增加引用计数
 
@@ -195,8 +203,9 @@ if (std::shared_ptr<Data> shared_p = weak_p.lock()) { // 尝试“提升”为 s
 lock() 方法是原子的。它要么让你成功拿到一个合法的 shared_ptr（并增加计数），要么返回空。这完美解决了“检查指针是否有效”和“使用指针”之间的竞态问题
 
 ---
+
 ## 6 性能飞跃 —— 移动语义（Move Semantics）
-移动语义的本质： 不是拷贝数据，而是**“偷取”**资源。 想象你搬家时，不是把旧房子的家具照样买一份新的放进新房子（拷贝），而是直接把旧房子的钥匙换成新房子的钥匙（移动）
+移动语义的本质： 不是拷贝数据，而是 **“偷取”** 资源。 想象你搬家时，不是把旧房子的家具照样买一份新的放进新房子（拷贝），而是直接把旧房子的钥匙换成新房子的钥匙（移动）
 ```cpp
 class BigBuffer {
     int* data;
@@ -297,7 +306,9 @@ public:
 * 置空原对象：这是 C 程序员最容易忘记的一步。如果你不把 other.data 置为 nullptr，那么当 other 超出作用域执行析构函数时，它会 delete[] 掉你刚刚“偷”过来的内存
 
 ---
-## 7 STL (std::vector)
+
+## 7 STL
+### 7.1 std::vector
 std::vector 扩容
 * 申请空间：通常按 1.5 倍或 2 倍增长。
 * 元素迁移：这是关键！它不是简单的 memcpy。
@@ -341,7 +352,7 @@ v.push_back(5); // 假设这里触发了扩容（重新分配内存）
 
 ---
 
-## 8 STL (std::unordered_map)
+### 7.2 std::unordered_map
 基于 **哈希表** 实现的，提供了平均时间复杂度为 $O(1)$ 的查找、插入和删除效率。
 底层结构：桶（Buckets）
 std::unordered_map 的底层通常是一个数组，每个元素被称为一个 **“桶（Bucket）”**。
@@ -422,7 +433,7 @@ C 程序员的优化直觉：如果你知道要存 1000 个元素，提前调用
 
 ---
 
-## 9 Lambda
+## 8 Lambda
 Lambda 的本质：闭包与捕获
 
 Lambda 最强大的地方在于它能**“捕获”**所在作用域内的变量。这在 C 语言的普通函数指针中是做不到的。
@@ -452,4 +463,56 @@ struct AnonymousLambda {
 
 ---
 
-## 10 std::string
+## 9 std::string
+std::string 是 RAII 封装的、可变长的、拥有所有权的字符序列容器
+* 管理一段 连续的字符内存
+* 自动申请 / 释放（不用你 new/delete）
+* 可以动态增长
+* 行为像值类型（能拷贝、能移动）
+
+小字符串优化（SSO）
+
+👉 不会分配堆内存！
+* 短字符串直接存在 std::string 对象内部
+* 减少 malloc/free
+* 拷贝更快，cache 友好
+
+📌 常见阈值：
+* 15 字节（64 位平台，libstdc++）
+
+性能 & 最佳实践
+
+只读参数用 std::string_view
+```cpp
+void foo(std::string_view sv);
+```
+* 不拷贝
+* 不分配
+* 特别适合解析、协议、日志
+
+**注意生命周期**
+```cpp
+std::string_view sv = std::string("abc"); // ❌ 悬空
+```
+
+构造前 reserve
+```cpp
+std::string s;
+s.reserve(n);
+```
+
+返回 std::string 没问题
+```cpp
+std::string make() {
+    return "hello";
+}
+```
+* NRVO / move
+* 不用担心性能
+
+⭐ 面试总结金句
+
+* std::string 是连续内存、RAII 管理的值类型；
+* 拷贝是深拷贝，移动是资源转移；
+* 性能敏感的只读场景优先使用 std::string_view，
+* 注意内存重分配会使指针和引用失效。

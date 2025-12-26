@@ -94,3 +94,95 @@ RAII（Resource Acquisition Is Initialization，资源获取即初始化）
 | 互斥锁  | `std::lock_guard`, `std::unique_lock` |
 | 文件流  | `std::fstream` |
 | 线程    | `std::jthread` (C++20) |
+
+---
+
+# 5. CRTP
+**CRTP 是为了实现“没有虚函数开销的多态”**, 在编译期就固定下来的“函数指针表”，而不是在运行期去查表。
+
+## 5.1. CRTP 的基本形态
+```cpp
+// 1. 定义模板父类
+template <typename Derived>
+class Base {
+public:
+    void interface() {
+        // 关键：将 this 指针强转为模板参数指定的子类指针
+        // 然后调用子类的实现
+        static_cast<Derived*>(this)->implementation();
+    }
+};
+
+// 2. 子类继承时，把自己传给父类
+class Derived : public Base<Derived> {
+public:
+    void implementation() {
+        std::cout << "Derived implementation called!" << std::endl;
+    }
+};
+```
+
+## 5.2 对比虚函数
+虚函数（动态多态）的代价：
+* 内存开销：每个对象多一个 vptr 指针，每个类多一张 vtable 表。
+* 运行开销：调用时需要通过 vptr 查 vtable，再跳转地址，无法进行内联优化（Inline）。
+* 适用场景：你直到运行那一刻才知道对象是谁（比如一个 vector<Animal*> 里面既有猫又有狗）。
+
+CRTP（静态多态）的优势：
+* 零内存开销：对象大小就是数据成员的大小，没有多余指针。
+* 极致性能：因为代码在编译期就确定了，编译器可以把子类的代码直接内联到调用处。
+* 适用场景：你在写代码时就知道具体的类型（比如特定的驱动程序、特定的算法实现）。
+
+
+## 5.3 CRTP 的三大实战用途
+* 静态接口约束 (Static Interface)
+    * 这类似于 Java 的接口或 C++ 的纯虚函数，但它发生在编译期。如果你忘记在子类实现 implementation()，编译器会直接报错，而不是等到运行时崩掉。
+
+* 扩展功能（Mixin / 插槽）
+    * 这是 CRTP 最强大的地方：父类可以为子类“自动注入”功能。比如你想让很多类都支持“克隆（Clone）”功能：
+```cpp
+template <typename Derived>
+class Cloneable {
+public:
+    Derived* clone() const {
+        return new Derived(static_cast<const Derived&>(*this));
+    }
+};
+
+// 只要继承一下，MyClass 就立刻拥有了精准返回 MyClass* 的 clone 方法
+class MyClass : public Cloneable<MyClass> {
+    // ...
+};
+```
+* 计数器（Object Counter）
+    * 如果你想统计某个类当前有多少个活跃对象（C 语言里你可能得手动在 init 和 destroy 里改全局变量）：
+```cpp
+template <typename T>
+class Counter {
+    static inline int count = 0; // C++17 静态成员初始化
+protected:
+    Counter() { count++; }
+    ~Counter() { count--; }
+public:
+    static int get_count() { return count; }
+};
+
+class User : public Counter<User> {};
+class Task : public Counter<Task> {}; // User 和 Task 的计数器是完全独立的
+```
+
+
+你可能会问：Base<Derived> 在解析的时候，Derived 还没定义完呢，这合法吗？
+
+**真相是**：在 C++ 中，当子类 Derived : public Base<Derived> 声明时，Derived 被视为一个**“不完整类型（Incomplete Type）”。而模板函数的成员函数（如 interface()）只有在被调用**时才会实例化。到那个时候，Derived 已经定义完成了。
+
+这就是为什么 CRTP 能够“反向调用”子类的函数。
+
+| 特性	    |  虚函数 (Dynamic)	 | CRTP (Static) |
+|---------  |------------| ---------- |
+| 决策时间	 |  运行期 (Runtime) | 编译期 (Compile-time) |
+| 性能	    |  有查表开销，难内联	 |  零开销，易内联   |
+| 灵活性	| 高（支持异质容器存储）	| 低（每个子类的父类类型都不同）  |
+| 代码体积	| 较小	     | 较大（每个特化都会生成一份代码） |
+
+**什么时候用？** 如果你在写底层驱动、数学库、或者性能敏感的中间件，且不需要在运行时动态切换对象类型，CRTP 是你超越 C 语言性能上限的神器。

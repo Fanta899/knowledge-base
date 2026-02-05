@@ -112,3 +112,46 @@ if (!inserted) {
 | `find + emplace`       | **2**   | 0 / 1     | 中         | ⭐     |
 
 **unordered_map + try_emplace + reserve 才是可控 latency 的组合**
+
+# 3.推荐用法总结
+✅ 查key
+```cpp
+auto it = m.find(key);
+```
+✅ 查 + 插（不覆盖）
+```cpp
+auto [it, inserted] = m.try_emplace(key, args...);
+```
+✅ 查 + 插 / 覆盖
+```cpp
+auto [it, inserted] = m.insert_or_assign(key, value);
+```
+❌ 不推荐
+```cpp
+if (m.find(key) == m.end()) {
+    m.emplace(key, value);
+}
+```
+## 哪些情况下 find_if 反而是对的？
+✅ 条件不是 key
+```cpp
+// 按 value 查
+std::ranges::find_if(m, [](auto& kv) {
+    return kv.second > 100;
+});
+```
+✅ 多条件组合
+```cpp
+std::ranges::find_if(m, [](auto& kv) {
+    return kv.first > 10 && kv.second.is_valid();
+});
+```
+✅ 视图组合（可读性优先）
+```cpp
+auto it = std::ranges::find_if(
+    m | std::views::filter(pred1),
+    pred2
+);
+```
+## 一句话工程结论（给面试官 / code review 用）
+try_emplace 是“查找 + 条件构造 + 插入”的最优融合接口在 std::map / std::unordered_map 中，几乎总是优于手写组合

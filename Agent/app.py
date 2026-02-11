@@ -68,4 +68,10 @@ if prompt := st.chat_input("输入你的回答..."):
         st.session_state.messages.append({"role": "assistant", "content": full_response})
         
     except Exception as e:
-        st.error(f"发生错误: {str(e)}")
+            # 捕捉额度不足的错误
+            if "insufficient_quota" in str(e):
+                st.error("🚫 余额不足：您的 API Key 额度已耗尽或已过期，请检查账户余额。")
+            elif "invalid_api_key" in str(e):
+                st.error("🔑 Key 错误：您输入的 API Key 无效，请重新检查。")
+            else:
+                st.error(f"❌ 发生错误: {str(e)}")

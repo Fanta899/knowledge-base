@@ -518,6 +518,11 @@ struct Base {
     }
 };
 ```
+### 局限性（CRTP 无法替代虚函数的场景）
+- 异构容器：Base\<A\> 和 Base\<B\> 是不同类型，无法放入 std::vector\<Base*\>
+- 运行时决策：类型在编译期未知（如从配置文件、网络消息决定用哪个实现）
+- 动态加载：插件系统、dll/so 动态库，类型在链接期后才确定
+- 接口与实现分离：需要对外隐藏具体类型（pImpl、ABI 稳定性）
 
 ### 常见用途
 
@@ -696,6 +701,12 @@ struct Particles {
 perf c2c record ./your_program
 perf c2c report
 ```
+
+### 加分点
+- std::hardware_destructive_interference_size（C++17）：编译期获取目标平台 cache line 大小，比硬编码 64 更可移植
+- False Sharing 的对立面 True Sharing：同一核频繁访问的数据应主动放在同一 cache line 内（hardware_constructive_interference_size），提升局部性
+- 检测工具：perf c2c（cache-to-cache）可以直接定位 false sharing 热点，输出哪个变量在哪两个核之间频繁迁移
+- NUMA 场景：跨 NUMA node 的 cache line 迁移代价更大（~300ns+），需结合 numactl 绑核绑内存
 
 ---
 

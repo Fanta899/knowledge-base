@@ -14,14 +14,6 @@ EM 是 XX 自研的**用户态事件驱动调度框架**，L2 代码构建在其
 
 关系：**Core → QueueGroup → Queue → EO**
 
-### 继承层次
-
-```
-EoBase                          ← 基类：生命周期管理 (start/stop/init)
-  └─ EoL2LOShared               ← L2-LO 共享层：多 pool/queue 管理
-       └─ dl::receiver::Eo      ← 具体 EO：实现 receive/handleEvent
-```
-
 ---
 
 ## 2. 消息分发流程
@@ -54,7 +46,7 @@ EM 调度器 → receiveCallback() → processEvent()
   → fsm->deleteEvent() / processDelayedEvents()
 ```
 
-**路径 B：直接 receive 模式（L2-LO DL Receiver）**
+**路径 B：直接 receive 模式（L2-LO）**
 ```
 EM 调度器 → receiveCallback()
   → eo->receive(event, type, msgId, queue_context)
@@ -78,7 +70,7 @@ EM 调度器 → receiveCallback()
 
 ## 3. EM 与 epoll 的根本区别
 
-| 维度 | epoll | Nokia EM |
+| 维度 | epoll | XX EM |
 |---|---|---|
 | 场景 | 通用 Linux I/O 多路复用 | 实时通信专用事件调度 |
 | 触发源 | 文件描述符 (socket/pipe/fd) | 内存中的事件对象 (em_event_t) |
@@ -97,7 +89,7 @@ EM 调度器 → receiveCallback()
 EM 的所有事件和数据分配在**预留的 Hugepage 内存**上，不走标准 malloc：
 
 - **x86 (VDU/VCU)**：DPDK 的 `rte_malloc`、`rte_mempool`（底层是 Linux hugepage mmap，初始化后全在用户态）
-- **ARM (BBP)**：ODP 共享内存 + Nokia `AaMem` 分配器
+- **ARM (BBP)**：ODP 共享内存 + XX `AaMem` 分配器
 - **EM Pool**：`em_pool_create()` 初始化时预分配子池，运行时 em_alloc / em_free 只是移动池中的指针，无系统调用
 
 ```
@@ -156,9 +148,9 @@ while (running) {
 
 | 平台 | 硬件 | 后端技术 |
 |---|---|---|
-| BBP (ARM) | 基站 baseband | ODP + Nokia 自研 EM |
+| BBP (ARM) | 基站 baseband | ODP + XX 自研 EM |
 | VDU/VCU (x86) | 虚拟化 DU | DPDK + RCP-ODP |
-| SNF (Marlin/Nemo) | Nokia 专用硬件 | Nokia 硬件加速 EM |
+| SNF (Marlin/Nemo) | XX 专用硬件 | XX 硬件加速 EM |
 
 配置切换通过编译宏：`USE_EM_ODP`、`RCP_ODP`、`PLTF_BBP`、`VDU`、`VCU`、`PLATFORM_DEVICE_MARLIN` 等。
 
@@ -170,7 +162,7 @@ while (running) {
   硬件 → 中断 → 内核 → 协议栈 → epoll_wait() 唤醒 → App
   每次 I/O 至少 2 次用户态/内核态切换
 
-Nokia EM (kernel bypass):
+XX EM (kernel bypass):
   App → em_send() → rte_ring 入队 (用户态 CAS)
   EM dispatcher busy-poll → rte_ring 出队 → receiveCallback()
   全程零系统调用、零上下文切换
